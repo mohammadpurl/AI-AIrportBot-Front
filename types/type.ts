@@ -332,3 +332,30 @@ export interface FlightItem {
     error?: string;
     id?: string | number;
   }
+
+  export interface UpdateTripRequest {
+    trip_id: string;
+    order_id?: string | null; // optional, can be null
+    airportName?: string;
+    travelType?: string; // e.g., "departure" | "arrival"
+    travelDate?: string;
+    flightNumber?: string;
+    flightId?: string;
+    buyer_phone?: string;
+    buyer_email?: string;
+    passengers?: Passenger[];
+    passengerCount?: string;
+    additionalInfo?: string;
+    flightType?: "class_a" | "class_b" | "class_c";
+    cip_class_type?: "class_a" | "class_b" | "class_c";
+    order_comment?: string;
+    payment_method?: string;
+    // Add any other trip-related fields as needed
+  }
+
+  export interface UpdateTripResponse {
+    success: boolean;
+    message?: string;
+    error?: string;
+    data?: any;
+  }

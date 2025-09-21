@@ -4,6 +4,8 @@ import gregorian from "react-date-object/calendars/gregorian";
 import gregorian_en from "react-date-object/locales/gregorian_en";
 
 import React, { useEffect, useRef, useState } from "react";
+import { useForm, useFieldArray, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
  
 import { Plus, Minus, Calendar, Plane, Users, Phone, Mail, FileText, CreditCard } from "lucide-react";
 import DatePicker from "react-multi-date-picker";
@@ -21,80 +23,88 @@ import { Textarea } from "./ui/textarea";
 import { useApiNotification } from "@/hooks/useApiNotification";
 import { Label } from "./ui/label";
 import { Passenger, TicketInfo } from "@/types/type";
-import { createOrder, createPassenger, getOrderPrices, getPaymentLink, fetchTrip, findFlightByNumber } from "@/services/api";
+import { createOrder, createPassenger, getOrderPrices, fetchTrip, findFlightByNumber, updateTrip, getPaymentLinkNew } from "@/services/api";
+import { travelFormSchema, ValidatedTravelForm, ValidatedPassenger } from "@/lib/validation";
 
 // Extended Passenger interface with additional fields
-interface ExtendedPassenger extends Passenger {
-  description: string;
+interface ExtendedPassenger extends ValidatedPassenger {
   attach_file?: File;
-  // nationality is already in Passenger interface
 }
 
-// Extended TicketInfo interface (override conflicting fields)
-type ExtendedTicketInfo = Omit<TicketInfo, "travelDate" | "passengers"> & {
-  // allow DateObject for client form usage (client-only)
-  travelDate?: string | DateObject | null;
-  // store Gregorian travel date (YYYY-MM-DD)
-  travelDateGregorian?: string;
-  terminal_id: number;
-  cip_class_type: "class_a" | "class_b";
-  final_destination: string;
+// Form data type for react-hook-form
+type FormData = ValidatedTravelForm & {
+  travelDate?: DateObject | null;
   travel_time?: string;
-  pets: { [key: string]: number };
-  attendances: { [key: string]: number };
-  buyer_phone: string;
-  buyer_email: string;
-  order_comment: string;
-  gateway: number;
-  payment_method: "zarinpal" | "saman" | "wallet";
+  final_destination?: string;
   passengers: ExtendedPassenger[];
 };
 
 type TravelFormProps = { ticketId: string };
 
-  const TravelForm: React.FC<TravelFormProps> = ({ ticketId }) => {
-  const { showSuccess, showError, showInfo, handleApiResponse, handleApiError } = useApiNotification();
+const TravelForm: React.FC<TravelFormProps> = ({ ticketId }) => {
+  const { showSuccess, showError, showInfo, handleApiError } = useApiNotification();
   const [flightId, setFlightId] = useState<string>("");
   const lastKeyRef = useRef<string>("");
   const inFlightRef = useRef<string | null>(null);
-    const [createdOrderId] = useState<string | null>(null);
-    const [totalAmount, setTotalAmount] = useState<number | null>(null);
-    const [destinationTitleFa, setDestinationTitleFa] = useState<string>("");
-
-  const [travelData, setTravelData] = useState<ExtendedTicketInfo>({
-    airportName: "",
-    travelDate: null,
-    travelDateGregorian: "",
-    flightNumber: "",
-    terminal_id: 1,
-    cip_class_type: "class_a",
-    final_destination: "",
-    travel_time: "",
-    pets: {},
-    attendances: {},
-    buyer_phone: "",
-    buyer_email: "",
-    order_comment: "",
-    gateway: 4,
-    payment_method: "zarinpal",
-    passengers: [
-      {
-        name: "",
-        lastName: "",
-        nationalId: "",
-        passportNumber: "",
-        luggageCount: 0,
-        passengerType: "adult",
-        gender: "female",
-        nationality: "iranian",
-        description: "",
-        attach_file: undefined,
-      },
-    ],
-  });
+  const [createdOrderId, setCreatedOrderId] = useState<string | null>(null);
+  const [totalAmount, setTotalAmount] = useState<number | null>(null);
+  const [destinationTitleFa, setDestinationTitleFa] = useState<string>("");
 
   // Flight type state (ورودی/خروجی)
   const [flightType, setFlightType] = useState<"departures" | "arrivals">("departures");
+
+  // React Hook Form setup
+  const {
+    register,
+    control,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors, isSubmitting },
+    reset,
+  } = useForm<FormData>({
+    resolver: zodResolver(travelFormSchema),
+    defaultValues: {
+      airportName: "",
+      flightNumber: "",
+      travelDateGregorian: new DateObject().convert(gregorian).format("YYYY-MM-DD"),
+      travelDate: new DateObject(),
+      buyer_phone: "",
+      buyer_email: "",
+      order_comment: "",
+      terminal_id: 1,
+      cip_class_type: "class_a",
+      final_destination: "",
+      travel_time: "",
+      pets: {},
+      attendances: {},
+      gateway: 4,
+      payment_method: "zarinpal",
+      passengers: [
+        {
+          name: "",
+          lastName: "",
+          nationalId: "",
+          passportNumber: "",
+          luggageCount: 0,
+          passengerType: "adult",
+          gender: "female",
+          nationality: "iranian",
+          description: "",
+          attach_file: undefined,
+        },
+      ],
+    },
+  });
+
+  // Field array for passengers
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: "passengers",
+  });
+
+  // Watch form values for flight search
+  const watchedValues = watch();
 
   // Fetch trip data once based on ticketId
   useEffect(() => {
@@ -105,11 +115,11 @@ type TravelFormProps = { ticketId: string };
         const data = await fetchTrip(ticketId) as Partial<TicketInfo> & { passengers?: Passenger[] };
 
         const parsed = data.travelDate && typeof data.travelDate === "string" ? parseDate(data.travelDate) : (data.travelDate as DateObject | null | undefined) ?? null;
-        debugger;
-        const next: ExtendedTicketInfo = {
+        
+        const formData: FormData = {
           airportName: data.airportName || "",
-          travelDate: parsed ?? null,
-          travelDateGregorian: parsed ? (parsed as DateObject).convert(gregorian).format("YYYY-MM-DD") : "",
+          travelDate: parsed ?? new DateObject(),
+          travelDateGregorian: parsed ? (parsed as DateObject).convert(gregorian).format("YYYY-MM-DD") : new DateObject().convert(gregorian).format("YYYY-MM-DD"),
           flightNumber: data.flightNumber || "",
           terminal_id: 1,
           cip_class_type: "class_a",
@@ -129,35 +139,41 @@ type TravelFormProps = { ticketId: string };
               nationalId: "",
               passportNumber: "",
               luggageCount: 0,
-              passengerType: "adult",
-              gender: "female",
-              nationality: "iranian",
+              passengerType: "adult" as const,
+              gender: "female" as const,
+              nationality: "iranian" as const,
             },
           ]).map((p: Passenger) => ({
-      ...p,
-      description: "",
-      attach_file: undefined,
-            nationality: p.nationality || "iranian",
+            name: p.name || "",
+            lastName: p.lastName || "",
+            nationalId: p.nationalId || "",
+            passportNumber: p.passportNumber || "",
+            luggageCount: typeof p.luggageCount === 'number' ? p.luggageCount : parseInt(String(p.luggageCount || 0), 10),
+            passengerType: p.passengerType || "adult" as const,
+            gender: (p.gender as "male" | "female") || "female" as const,
+            nationality: (p.nationality as "iranian" | "non_iranian" | "diplomat") || "iranian" as const,
+            description: "",
+            attach_file: undefined,
           })),
-        } as ExtendedTicketInfo;
+        };
 
         if (cancelled) return;
-        setTravelData(next);
+        reset(formData);
       } catch (e) {
         console.error("Failed to fetch trip:", e);
       }
     })();
     return () => { cancelled = true; };
-  }, [ticketId]);
+  }, [ticketId, reset]);
 
-  // Search flight when flight number, date, class, or flight type changes
+  // Automatic flight search when form loads with data
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const flightNo = travelData.flightNumber;
-        const dateStr = travelData.travelDateGregorian;
-        const cipClass = travelData.cip_class_type;
+        const flightNo = watchedValues.flightNumber;
+        const dateStr = watchedValues.travelDateGregorian;
+        const cipClass = watchedValues.cip_class_type;
         
         if (!flightNo || !dateStr) return;
         
@@ -179,15 +195,35 @@ type TravelFormProps = { ticketId: string };
         if (!cancelled) {
           if (res?.success) {
             setFlightId(res.flight_id || "");
-            setTravelData(prev => ({
-              ...prev,
-              // Prefer IATA code from airport_to.ap_iata, then arrival (which we map to iata when present), then keep previous
-              final_destination:
-                (res.matched_item?.airport_to?.ap_iata as string | undefined) ||
-                (res.flight_info?.arrival as string | undefined) ||
-                prev.final_destination,
-              travel_time: res.flight_info?.departure_time || prev.travel_time,
-            }));
+            
+            // Extract date from scheduled_datetime (format: "2025-09-20 00:30:00")
+            let flightDate = null;
+            if (res.flight_info?.scheduled_datetime) {
+              try {
+                const dateStr = res.flight_info.scheduled_datetime.split(' ')[0]; // Get only date part
+                flightDate = new DateObject(dateStr);
+              } catch {
+                console.warn('Failed to parse flight date:', res.flight_info.scheduled_datetime);
+              }
+            }
+            
+            // Update form values
+            setValue("airportName", 
+              (res.matched_item?.airport_from?.ap_title_fa as string | undefined) ||
+              (res.flight_info?.departure as string | undefined) ||
+              watchedValues.airportName
+            );
+            setValue("final_destination",
+              (res.matched_item?.airport_to?.ap_iata as string | undefined) ||
+              (res.flight_info?.arrival as string | undefined) ||
+              watchedValues.final_destination
+            );
+            setValue("travel_time", res.flight_info?.departure_time || watchedValues.travel_time);
+            if (flightDate) {
+              setValue("travelDate", flightDate);
+              setValue("travelDateGregorian", flightDate.convert(gregorian).format("YYYY-MM-DD"));
+            }
+            
             setDestinationTitleFa(
               (res.matched_item?.airport_to?.ap_title_fa as string | undefined) ||
               (res.destination_title_fa as string | undefined) ||
@@ -199,11 +235,8 @@ type TravelFormProps = { ticketId: string };
             showSuccess(`پرواز ${flightNo} با موفقیت پیدا شد`, "پرواز آماده است");
           } else {
             setFlightId("");
-            setTravelData(prev => ({
-              ...prev,
-              final_destination: "",
-              travel_time: "",
-            }));
+            setValue("final_destination", "");
+            setValue("travel_time", "");
             
             // Show error notification
             showError(`پرواز ${flightNo} در تاریخ ${dateStr} یافت نشد`, "پرواز پیدا نشد");
@@ -219,126 +252,146 @@ type TravelFormProps = { ticketId: string };
       }
     })();
     return () => { cancelled = true; };
-  }, [travelData.flightNumber, travelData.travelDateGregorian, travelData.cip_class_type, flightType]);
+  }, [watchedValues.flightNumber, watchedValues.travelDateGregorian, watchedValues.cip_class_type, flightType, showInfo, showSuccess, showError, setValue]);
 
-  const handleBasicInfoChange = (
-    field: keyof Pick<ExtendedTicketInfo, "airportName" | "flightNumber" | "cip_class_type" | "final_destination" | "travel_time" | "buyer_phone" | "buyer_email" | "order_comment" | "payment_method">,
-    value: string | number,
-  ) => {
-    setTravelData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+  // Manual flight search function
+  const searchFlight = async () => {
+    try {
+      const flightNo = watchedValues.flightNumber;
+      const dateStr = watchedValues.travelDateGregorian;
+      const cipClass = watchedValues.cip_class_type;
+      
+      if (!flightNo || !dateStr) {
+        showError("لطفاً شماره پرواز و تاریخ را وارد کنید", "اطلاعات ناقص");
+        return;
+      }
+      
+      const key = `${flightNo}|${dateStr}|${flightType}|${cipClass}|1`;
+      if (lastKeyRef.current === key) return;
+      if (inFlightRef.current === key) return;
+      
+      inFlightRef.current = key;
+      
+      // Show searching notification
+      showInfo("در حال جستجوی پرواز...", "جستجوی پرواز");
+
+      const res = await findFlightByNumber(flightNo, dateStr, {
+        cip_class: cipClass,
+        expand: 1,
+        flight_type_override: flightType,
+      });
+      
+      if (res?.success) {
+        setFlightId(res.flight_id || "");
+        
+        // Extract date from scheduled_datetime (format: "2025-09-20 00:30:00")
+        let flightDate = null;
+        if (res.flight_info?.scheduled_datetime) {
+          try {
+            const dateStr = res.flight_info.scheduled_datetime.split(' ')[0]; // Get only date part
+            flightDate = new DateObject(dateStr);
+          } catch {
+            console.warn('Failed to parse flight date:', res.flight_info.scheduled_datetime);
+          }
+        }
+        
+        // Update form values
+        setValue("airportName", 
+          (res.matched_item?.airport_from?.ap_title_fa as string | undefined) ||
+          (res.flight_info?.departure as string | undefined) ||
+          watchedValues.airportName
+        );
+        setValue("final_destination",
+          (res.matched_item?.airport_to?.ap_iata as string | undefined) ||
+          (res.flight_info?.arrival as string | undefined) ||
+          watchedValues.final_destination
+        );
+        setValue("travel_time", res.flight_info?.departure_time || watchedValues.travel_time);
+        if (flightDate) {
+          setValue("travelDate", flightDate);
+          setValue("travelDateGregorian", flightDate.convert(gregorian).format("YYYY-MM-DD"));
+        }
+        
+        setDestinationTitleFa(
+          (res.matched_item?.airport_to?.ap_title_fa as string | undefined) ||
+          (res.destination_title_fa as string | undefined) ||
+          ""
+        );
+        lastKeyRef.current = key;
+        
+        // Show success notification
+        showSuccess(`پرواز ${flightNo} با موفقیت پیدا شد`, "پرواز آماده است");
+      } else {
+        setFlightId("");
+        setValue("final_destination", "");
+        setValue("travel_time", "");
+        
+        // Show error notification
+        showError(`پرواز ${flightNo} در تاریخ ${dateStr} یافت نشد`, "پرواز پیدا نشد");
+      }
+      
+      inFlightRef.current = null;
+    } catch (e) {
+      console.error("Failed to search flight:", e);
+      showError("خطایی در جستجوی پرواز رخ داد", "خطا در جستجو");
+    }
   };
 
   const handleDateChange = (date: DateObject | string | null) => {
     if (!date) {
-      setTravelData((prev) => ({
-        ...prev,
-        travelDate: null,
-        travelDateGregorian: "",
-      }));
+      setValue("travelDate", null);
+      setValue("travelDateGregorian", "");
       return;
     }
     const dateObj = date instanceof DateObject ? date : new DateObject(date);
-    setTravelData((prev) => ({
-      ...prev,
-      travelDate: dateObj,
-      travelDateGregorian: dateObj ? dateObj.convert(gregorian).format("YYYY-MM-DD") : "",
-    }));
+    setValue("travelDate", dateObj);
+    setValue("travelDateGregorian", dateObj ? dateObj.convert(gregorian).format("YYYY-MM-DD") : "");
   };
-
-  const handlePassengerChange = (
-    index: number,
-    field: keyof ExtendedPassenger,
-    value: string | number | File,
-  ) => {
-    setTravelData((prev): ExtendedTicketInfo => ({
-      ...prev,
-      passengers: prev.passengers.map((passenger, i) => {
-        if (i !== index) return passenger;
-        return { ...passenger, [field]: value } as ExtendedPassenger;
-      }),
-    }));
-  };
-
- 
 
   const handleFileChange = (index: number, file: File | undefined) => {
-    setTravelData((prev): ExtendedTicketInfo => ({
-      ...prev,
-      passengers: prev.passengers.map((passenger, i) => {
-        if (i !== index) return passenger;
-        return { ...passenger, attach_file: file } as ExtendedPassenger;
-      }),
-    }));
+    setValue(`passengers.${index}.attach_file`, file);
   };
 
   const addPassenger = () => {
-    setTravelData((prev) => ({
-      ...prev,
-      passengers: [
-        ...prev.passengers,
-        { 
-          name: "", 
-          lastName: "",
-          nationalId: "",           
-          passportNumber: "",
-          luggageCount: 0,
-          passengerType: "adult" as const,
-          gender: "female" as const,
-          nationality: "iranian" as const, // ایرانی، غیر ایرانی، دیپلمات
-          description: "",
-          attach_file: undefined,
-        },
-      ],
-    }));
+    append({ 
+      name: "", 
+      lastName: "",
+      nationalId: "",           
+      passportNumber: "",
+      luggageCount: 0,
+      passengerType: "adult" as const,
+      gender: "female" as const,
+      nationality: "iranian" as const,
+      description: "",
+      attach_file: undefined,
+    });
   };
 
   const removePassenger = (index: number) => {
-    if (travelData.passengers.length > 1) {
-      setTravelData((prev): ExtendedTicketInfo => ({
-        ...prev,
-        passengers: prev.passengers.filter((_, i) => i !== index) as ExtendedPassenger[],
-      }));
+    if (fields.length > 1) {
+      remove(index);
     }
   };
 
-  const handleSubmit = async () => {
+  const onSubmit = async (data: FormData) => {
     try {
-      // Resolve Gregorian flight date (YYYY-MM-DD)
-      debugger;
-      let flyDate = travelData.travelDateGregorian || "";
-      if (!flyDate && travelData.travelDate) {
-        try {
-          const dateObj = travelData.travelDate instanceof DateObject
-            ? travelData.travelDate
-            : new DateObject(travelData.travelDate as unknown as string);
-          flyDate = dateObj.convert(gregorian).format("YYYY-MM-DD");
-        } catch {
-          // ignore conversion errors
-        }
-      }
-
       // Check if flight_id is available
       if (!flightId) {
         showError("لطفاً ابتدا پرواز را جستجو کنید", "خطا");
         return;
       }
 
-      // reservationData removed (legacy flow)
-
       // Call CIP API
       // Create order (server proxy)
       const orderResult = await createOrder({
         flight_id: flightId || undefined,
-        flight_date: travelData.travelDateGregorian || undefined,
-        flight_number: travelData.flightNumber || undefined,
-        order_email: travelData.buyer_email,
-        order_mobile: travelData.buyer_phone,
-        order_comment: travelData.order_comment,
+        flight_date: data.travelDateGregorian || undefined,
+        flight_number: data.flightNumber || undefined,
+        order_email: data.buyer_email,
+        order_mobile: data.buyer_phone,
+        order_comment: data.order_comment,
         order_type: 'core',
-        cip_class: (travelData.cip_class_type === 'class_b' ? 'class_b' : 'class_a'),
+        cip_class: (data.cip_class_type === 'class_b' ? 'class_b' : 'class_a'),
       });
 
       if (!orderResult.success) {
@@ -350,14 +403,14 @@ type TravelFormProps = { ticketId: string };
       // Register passengers sequentially
       const orderId = orderResult.data?.order_id as string | undefined;
       if (orderId) {
-        for (const p of travelData.passengers) {
+        for (const p of data.passengers) {
           const passengerRes = await createPassenger({
             order_id: orderId,
             first_name: p.name,
             last_name: p.lastName || "",
             alt_name: `${p.name || ''} ${p.lastName || ''}`.trim(),
-            mobile_number: travelData.buyer_phone,
-            final_destination: travelData.final_destination || "",
+            mobile_number: data.buyer_phone,
+            final_destination: data.final_destination || "",
             passport_number: p.passportNumber || "",
             bag_count: Number(p.luggageCount) || 0,
             passen_type: p.passengerType,
@@ -373,9 +426,46 @@ type TravelFormProps = { ticketId: string };
           }
         }
         const prices = await getOrderPrices(orderId);
+        
         if (prices.success && prices.data) {
           setTotalAmount(prices.data.total_order_amount);
+          setCreatedOrderId(orderId); // Enable payment button
           showInfo(`${prices.data.total_order_amount.toLocaleString()} ریال`, "مبلغ کل سفارش");
+          
+          // Update trip with order ID
+          const updateResult = await updateTrip({
+            trip_id: ticketId,
+            order_id: orderId,
+            airportName: data.airportName,
+            travelType: flightType === "departures" ? "departure" : "arrival",
+            travelDate: data.travelDateGregorian,
+            flightNumber: data.flightNumber,
+            flightId: flightId,
+            buyer_phone: data.buyer_phone,
+            buyer_email: data.buyer_email,
+            passengers: data.passengers.map(p => ({
+              name: p.name,
+              lastName: p.lastName,
+              nationalId: p.nationalId,
+              passportNumber: p.passportNumber || "",
+              luggageCount: p.luggageCount,
+              passengerType: p.passengerType,
+              gender: p.gender,
+              nationality: p.nationality,
+            })),
+            passengerCount: data.passengers.length.toString(),
+            additionalInfo: data.order_comment,
+            flightType: data.cip_class_type,
+            cip_class_type: data.cip_class_type,
+            order_comment: data.order_comment,
+            payment_method: data.payment_method,
+          });
+          
+          if (updateResult.success) {
+            showSuccess("اطلاعات سفر با موفقیت به‌روزرسانی شد", "به‌روزرسانی موفق");
+          } else {
+            showError(updateResult.error || "خطا در به‌روزرسانی سفر", "خطا در به‌روزرسانی");
+          }
         } else if (!prices.success) {
           console.warn('Failed to fetch prices', prices.error);
         }
@@ -392,15 +482,18 @@ type TravelFormProps = { ticketId: string };
         showError("لطفاً ابتدا سفارش را ثبت کنید", "سفارش نامعتبر");
         return;
       }
-      const linkRes = await getPaymentLink(createdOrderId);
+      
+      const linkRes = await getPaymentLinkNew(createdOrderId);
       if (linkRes.success && linkRes.payment_link) {
-        window.location.href = linkRes.payment_link;
-          return;
-        }
-      throw new Error(linkRes.error || "لینک پرداخت دریافت نشد");
+        // Open payment link in new tab
+        window.open(linkRes.payment_link, '_blank');
+        showSuccess("لینک پرداخت در تب جدید باز شد", "پرداخت");
+      } else {
+        throw new Error(linkRes.error || "لینک پرداخت دریافت نشد");
+      }
     } catch (error) {
       console.error('Error on pay', error);
-      handleApiError(error, "مشکلی رخ داد");
+      handleApiError(error, "مشکلی در دریافت لینک پرداخت رخ داد");
     }
   };
 
@@ -412,6 +505,7 @@ type TravelFormProps = { ticketId: string };
     <div className="bg-navy-dark min-h-screen" dir="rtl">
       <div className="p-4 sm:p-6">
         <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 pb-8">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6">
           {/* Header */}
           <Card className="border-golden-accent border border-[#f5a623]/20 bg-[#0d0c1d] shadow-lg">
             <CardHeader className="text-center p-4 sm:p-6">
@@ -441,12 +535,14 @@ type TravelFormProps = { ticketId: string };
                   </Label>
                   <Input
                     id="airport"
-                    value={travelData.airportName}
-                    onChange={(e) =>
-                      handleBasicInfoChange("airportName", e.target.value)
-                    }
-                    className="bg-input border-golden-accent text-foreground"
+                    {...register("airportName")}
+                    className={`bg-input border-golden-accent text-foreground ${
+                      errors.airportName ? "border-red-500" : ""
+                    }`}
                   />
+                  {errors.airportName && (
+                    <p className="text-red-400 text-sm">{errors.airportName.message}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -456,34 +552,29 @@ type TravelFormProps = { ticketId: string };
                   <div className="flex gap-2">
                     <Input
                       id="flightNumber"
-                      value={travelData.flightNumber}
-                      onChange={(e) =>
-                        handleBasicInfoChange("flightNumber", e.target.value)
-                      }
-                      className="bg-input border-golden-accent text-foreground flex-1"
+                      {...register("flightNumber")}
+                      className={`bg-input border-golden-accent text-foreground flex-1 ${
+                        errors.flightNumber ? "border-red-500" : ""
+                      }`}
                       placeholder="مثال: IR123"
                     />
-                    {flightId ? (
-                      <div className="text-green-400 text-sm flex items-center gap-1">
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                        پرواز آماده است
+                  
                   </div>
-                    ) : travelData.flightNumber ? (
-                      <div className="text-yellow-400 text-sm flex items-center gap-1">
-                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        در حال جستجو...
-                      </div>
-                    ) : (
-                      <div className="text-gray-400 text-sm">
-                        شماره پرواز را وارد کنید
+                  {flightId ? (
+                    <div className="text-green-400 text-sm flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      پرواز آماده است
+                    </div>
+                  ) : (
+                    <div className="text-gray-400 text-sm">
+                      شماره پرواز و تاریخ را وارد کرده و دکمه جستجو را بزنید
                     </div>
                   )}
-                  </div>
+                  {errors.flightNumber && (
+                    <p className="text-red-400 text-sm">{errors.flightNumber.message}</p>
+                  )}
                 </div>
 
 
@@ -508,15 +599,17 @@ type TravelFormProps = { ticketId: string };
                   </Label>
                   <select
                     id="cip_class_type"
-                    value={travelData.cip_class_type}
-                    onChange={(e) =>
-                      handleBasicInfoChange("cip_class_type", e.target.value)
-                    }
-                    className="bg-input border-golden-accent text-foreground px-3 py-2 rounded-md w-full"
+                    {...register("cip_class_type")}
+                    className={`bg-input border-golden-accent text-foreground px-3 py-2 rounded-md w-full ${
+                      errors.cip_class_type ? "border-red-500" : ""
+                    }`}
                   >
                     <option value="class_a">Class A</option>
                     <option value="class_b">Class B</option>
                   </select>
+                  {errors.cip_class_type && (
+                    <p className="text-red-400 text-sm">{errors.cip_class_type.message}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -527,16 +620,10 @@ type TravelFormProps = { ticketId: string };
                   <Input
                     id="final_destination"
                       value={destinationTitleFa || ""}
-                      onChange={(e) => setDestinationTitleFa(e.target.value)}
-                      className="bg-input border-golden-accent text-foreground flex-1"
-                      placeholder="نام مقصد (فارسی)"
+                      readOnly
+                      className="bg-gray-600 border-golden-accent text-gray-300 flex-1 cursor-not-allowed"
+                      placeholder="نام مقصد (فارسی) - از API دریافت می‌شود"
                     />
-                    {/* <Input
-                    value={travelData.final_destination}
-                      onChange={(e) => handleBasicInfoChange("final_destination", e.target.value)}
-                      className="bg-input border-golden-accent text-foreground w-28"
-                      placeholder="IATA"
-                    /> */}
                   </div>
                 </div>
 
@@ -546,38 +633,62 @@ type TravelFormProps = { ticketId: string };
                   </Label>
                   <Input
                     id="travel_time"
-                    value={travelData.travel_time || ""}
-                    onChange={(e) =>
-                      handleBasicInfoChange("travel_time", e.target.value)
-                    }
-                    className="bg-input border-golden-accent text-foreground"
-                    placeholder="HH:MM"
+                    value={watchedValues.travel_time || ""}
+                    readOnly
+                    className="bg-gray-600 border-golden-accent text-gray-300 cursor-not-allowed"
+                    placeholder="HH:MM - از API دریافت می‌شود"
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label className="text-white">تاریخ سفر</Label>
                   <div className="relative">
-                    <DatePicker
-                      calendar={gregorian}
-                      locale={gregorian_en}
-                      value={travelData.travelDate}
-                      onChange={handleDateChange}
-                      style={{
-                        width: "100%",
-                        height: "40px",
-                        backgroundColor: "oklch(0.922 0 0)",
-                        border: "1px solid oklch(0.85 0.15 85)",
-                        borderRadius: "var(--radius)",
-                        color: "oklch(var(--foreground))",
-                        padding: "0 12px",
-                      }}
-                      placeholder="Select date (Gregorian)"
+                    <Controller
+                      name="travelDate"
+                      control={control}
+                      render={({ field }) => (
+                        <DatePicker
+                          calendar={gregorian}
+                          locale={gregorian_en}
+                          value={field.value}
+                          onChange={(date) => {
+                            field.onChange(date);
+                            handleDateChange(date);
+                          }}
+                          style={{
+                            width: "100%",
+                            height: "40px",
+                            backgroundColor: "oklch(0.922 0 0)",
+                            border: errors.travelDateGregorian ? "1px solid #ef4444" : "1px solid oklch(0.85 0.15 85)",
+                            borderRadius: "var(--radius)",
+                            color: "oklch(var(--foreground))",
+                            padding: "0 12px",
+                          }}
+                          placeholder="Select date (Gregorian)"
+                        />
+                      )}
                     />
                   </div>
+                  {errors.travelDateGregorian && (
+                    <p className="text-red-400 text-sm">{errors.travelDateGregorian.message}</p>
+                  )}
                 </div>
-
                 
+                
+              </div>
+              <div className=" flex justify-end">
+              <Button
+                      type="button"
+                      onClick={searchFlight}
+                      disabled={!watchedValues.flightNumber || !watchedValues.travelDateGregorian}
+                      className="bg-golden-accent text-accent-foreground hover:bg-golden-accent/80 px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      جستجو
+                </Button>
+
               </div>
             </CardContent>
           </Card>
@@ -600,14 +711,16 @@ type TravelFormProps = { ticketId: string };
                     <Phone className="text-golden-accent w-4 h-4" />
                     <Input
                       id="buyer_phone"
-                      value={travelData.buyer_phone}
-                      onChange={(e) =>
-                        handleBasicInfoChange("buyer_phone", e.target.value)
-                      }
-                      className="bg-input border-golden-accent text-foreground"
+                      {...register("buyer_phone")}
+                      className={`bg-input border-golden-accent text-foreground ${
+                        errors.buyer_phone ? "border-red-500" : ""
+                      }`}
                       placeholder="09121234567"
                     />
                   </div>
+                  {errors.buyer_phone && (
+                    <p className="text-red-400 text-sm">{errors.buyer_phone.message}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -619,14 +732,16 @@ type TravelFormProps = { ticketId: string };
                     <Input
                       id="buyer_email"
                       type="email"
-                      value={travelData.buyer_email}
-                      onChange={(e) =>
-                        handleBasicInfoChange("buyer_email", e.target.value)
-                      }
-                      className="bg-input border-golden-accent text-foreground"
+                      {...register("buyer_email")}
+                      className={`bg-input border-golden-accent text-foreground ${
+                        errors.buyer_email ? "border-red-500" : ""
+                      }`}
                       placeholder="example@email.com"
                     />
                   </div>
+                  {errors.buyer_email && (
+                    <p className="text-red-400 text-sm">{errors.buyer_email.message}</p>
+                  )}
                 </div>
               </div>
 
@@ -638,10 +753,7 @@ type TravelFormProps = { ticketId: string };
                   <FileText className="text-golden-accent w-4 h-4 mt-2" />
                   <Textarea
                     id="order_comment"
-                    value={travelData.order_comment}
-                    onChange={(e) =>
-                      handleBasicInfoChange("order_comment", e.target.value)
-                    }
+                    {...register("order_comment")}
                     className="bg-input border-golden-accent text-foreground min-h-[80px]"
                     placeholder="توضیحات اضافی درباره سفارش..."
                   />
@@ -661,7 +773,7 @@ type TravelFormProps = { ticketId: string };
                     variant="secondary"
                     className="bg-golden-accent text-accent-foreground shadow-course"
                   >
-                    {travelData.passengers.length} نفر
+                    {fields.length} نفر
                   </Badge>
                 </div>
                 <Button
@@ -680,7 +792,7 @@ type TravelFormProps = { ticketId: string };
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 p-4 sm:p-6 pt-0">
-              {travelData.passengers.map((passenger, index) => (
+              {fields.map((field, index) => (
                 <Card
                   key={index}
                   className=" bg-[#0e1222] text-white p-4 rounded-xl border border-blue-500 shadow-[0px_5px_20px_rgba(0,173,255,0.2)] hover:scale-[1.02] transition-all ease-out duration-1000 shadow-110"
@@ -690,7 +802,7 @@ type TravelFormProps = { ticketId: string };
                       <h4 className="text-white sm:text-lg font-semibold text-foreground">
                         مسافر {index + 1}
                       </h4>
-                      {travelData.passengers.length > 1 && (
+                      {fields.length > 1 && (
                         <Button
                           onClick={() => removePassenger(index)}
                           size="sm"
@@ -709,17 +821,15 @@ type TravelFormProps = { ticketId: string };
                            نام
                          </Label>
                          <Input
-                           value={passenger.name}
-                           onChange={(e) =>
-                             handlePassengerChange(
-                               index,
-                               "name",
-                               e.target.value,
-                             )
-                           }
-                           className="bg-input border-golden-accent text-black"
+                           {...register(`passengers.${index}.name`)}
+                           className={`bg-input border-golden-accent text-black ${
+                             errors.passengers?.[index]?.name ? "border-red-500" : ""
+                           }`}
                            placeholder="نام"
                          />
+                         {errors.passengers?.[index]?.name && (
+                           <p className="text-red-400 text-sm">{errors.passengers[index]?.name?.message}</p>
+                         )}
                        </div>
 
                        <div className="space-y-2">
@@ -727,34 +837,30 @@ type TravelFormProps = { ticketId: string };
                            نام خانوادگی
                          </Label>
                          <Input
-                           value={passenger.lastName}
-                           onChange={(e) =>
-                             handlePassengerChange(
-                               index,
-                               "lastName",
-                               e.target.value,
-                             )
-                           }
-                           className="bg-input border-golden-accent text-black"
+                           {...register(`passengers.${index}.lastName`)}
+                           className={`bg-input border-golden-accent text-black ${
+                             errors.passengers?.[index]?.lastName ? "border-red-500" : ""
+                           }`}
                            placeholder="نام خانوادگی"
                          />
+                         {errors.passengers?.[index]?.lastName && (
+                           <p className="text-red-400 text-sm">{errors.passengers[index]?.lastName?.message}</p>
+                         )}
                        </div>
 
                                              <div className="space-y-2">
                          <Label className="text-white">کد ملی</Label>
                          <Input
-                           value={passenger.nationalId}
-                           onChange={(e) =>
-                             handlePassengerChange(
-                               index,
-                               "nationalId",
-                               e.target.value,
-                             )
-                           }
-                           className="bg-input border-golden-accent text-foreground"
+                           {...register(`passengers.${index}.nationalId`)}
+                           className={`bg-input border-golden-accent text-foreground ${
+                             errors.passengers?.[index]?.nationalId ? "border-red-500" : ""
+                           }`}
                            placeholder="کد ملی ۱۰ رقمی"
                            maxLength={10}
                          />
+                         {errors.passengers?.[index]?.nationalId && (
+                           <p className="text-red-400 text-sm">{errors.passengers[index]?.nationalId?.message}</p>
+                         )}
                        </div>
 
                        {/* <div className="space-y-2">
@@ -776,14 +882,7 @@ type TravelFormProps = { ticketId: string };
                        <div className="space-y-2">
                          <Label className="text-white">شماره پاسپورت</Label>
                          <Input
-                           value={passenger.passportNumber}
-                           onChange={(e) =>
-                             handlePassengerChange(
-                               index,
-                               "passportNumber",
-                               e.target.value,
-                             )
-                           }
+                           {...register(`passengers.${index}.passportNumber`)}
                            className="bg-input border-golden-accent text-foreground"
                            placeholder="شماره پاسپورت"
                          />
@@ -792,14 +891,7 @@ type TravelFormProps = { ticketId: string };
                                              <div className="space-y-2">
                          <Label className="text-white">جنسیت</Label>
                          <select
-                           value={passenger.gender}
-                           onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                             handlePassengerChange(
-                               index,
-                               "gender",
-                               e.target.value as "male" | "female",
-                             )
-                           }
+                           {...register(`passengers.${index}.gender`)}
                            className="bg-input border-golden-accent text-foreground px-3 py-2 rounded-md w-full"
                          >
                            <option value="female">زن</option>
@@ -810,14 +902,7 @@ type TravelFormProps = { ticketId: string };
                        <div className="space-y-2">
                          <Label className="text-white">نوع مسافر</Label>
                          <select
-                           value={passenger.passengerType}
-                           onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                             handlePassengerChange(
-                               index,
-                               "passengerType",
-                               e.target.value as "adult" | "infant",
-                             )
-                           }
+                           {...register(`passengers.${index}.passengerType`)}
                            className="bg-input border-golden-accent text-foreground px-3 py-2 rounded-md w-full"
                          >
                            <option value="adult">بزرگسال</option>
@@ -828,20 +913,18 @@ type TravelFormProps = { ticketId: string };
                        <div className="space-y-2">
                          <Label className="text-white">ملیت</Label>
                          <select
-                           value={passenger.nationality}
-                           onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                             handlePassengerChange(
-                               index,
-                               "nationality",
-                               e.target.value as "iranian" | "non_iranian" | "diplomat",
-                             )
-                           }
-                           className="bg-input border-golden-accent text-foreground px-3 py-2 rounded-md w-full"
+                           {...register(`passengers.${index}.nationality`)}
+                           className={`bg-input border-golden-accent text-foreground px-3 py-2 rounded-md w-full ${
+                             errors.passengers?.[index]?.nationality ? "border-red-500" : ""
+                           }`}
                          >
                            <option value="iranian">ایرانی</option>
                            <option value="non_iranian">غیر ایرانی</option>
                            <option value="diplomat">دیپلمات</option>
                          </select>
+                         {errors.passengers?.[index]?.nationality && (
+                           <p className="text-red-400 text-sm">{errors.passengers[index]?.nationality?.message}</p>
+                         )}
                        </div>
 
                       <div className="space-y-2">
@@ -853,31 +936,25 @@ type TravelFormProps = { ticketId: string };
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() =>
-                              handlePassengerChange(
-                                index,
-                                "luggageCount",
-                                Math.max(0, Number(passenger.luggageCount ?? 0) - 1),
-                              )
-                            }
+                            onClick={() => {
+                              const currentValue = watchedValues.passengers[index]?.luggageCount ?? 0;
+                              setValue(`passengers.${index}.luggageCount`, Math.max(0, currentValue - 1));
+                            }}
                             className="border-golden-accent text-foreground hover:bg-golden-accent hover:text-accent-foreground h-8 w-8 p-0 transition-transform duration-300 ease-out hover:scale-110"
                           >
                             <Minus className="w-3 h-3 sm:w-4 sm:h-4" />
                           </Button>
                           <span className="text-lg sm:text-xl font-semibold text-white w-8 sm:w-10 text-center">
-                            {String(passenger.luggageCount ?? 0)}
+                            {String(watchedValues.passengers[index]?.luggageCount ?? 0)}
                           </span>
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() =>
-                              handlePassengerChange(
-                                index,
-                                "luggageCount",
-                                Number(passenger.luggageCount ?? 0) + 1,
-                              )
-                            }
+                            onClick={() => {
+                              const currentValue = watchedValues.passengers[index]?.luggageCount ?? 0;
+                              setValue(`passengers.${index}.luggageCount`, currentValue + 1);
+                            }}
                             className="border-golden-accent text-foreground hover:bg-golden-accent hover:text-accent-foreground h-8 w-8 p-0 transition-transform duration-300 ease-out hover:scale-110"
                           >
                             <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
@@ -888,14 +965,7 @@ type TravelFormProps = { ticketId: string };
                       <div className="space-y-2">
                         <Label className="text-white">توضیحات</Label>
                         <Textarea
-                          value={passenger.description}
-                          onChange={(e) =>
-                            handlePassengerChange(
-                              index,
-                              "description",
-                              e.target.value,
-                            )
-                          }
+                          {...register(`passengers.${index}.description`)}
                           className="bg-input border-golden-accent text-foreground min-h-[60px]"
                           placeholder="توضیحات اضافی..."
                         />
@@ -926,7 +996,7 @@ type TravelFormProps = { ticketId: string };
                             انتخاب فایل
                           </label>
                           <span className="text-gray-300 text-sm flex-1">
-                            {travelData.passengers[index].attach_file?.name || "هیچ فایلی انتخاب نشده"}
+                            {watchedValues.passengers[index]?.attach_file?.name || "هیچ فایلی انتخاب نشده"}
                           </span>
                         </div>
                       </div>
@@ -938,7 +1008,7 @@ type TravelFormProps = { ticketId: string };
           </Card>
 
           {/* Payment Method */}
-          <Card className="border-golden-accent border border-[#f5a623]/20 bg-[#0d0c1d] shadow-course">
+          {/* <Card className="border-golden-accent border border-[#f5a623]/20 bg-[#0d0c1d] shadow-course">
             <CardHeader className="p-4 sm:p-6">
               <CardTitle className="text-lg sm:text-xl text-foreground flex items-center gap-2">
                 <CreditCard className="text-golden-accent w-5 h-5 sm:w-6 sm:h-6" />
@@ -1002,7 +1072,7 @@ type TravelFormProps = { ticketId: string };
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
 
           {/* Action Buttons */}
           <div className="flex justify-end items-center gap-4 p-4 border-golden-accent border bg-[#0d0c1d] shadow-course">
@@ -1014,12 +1084,13 @@ type TravelFormProps = { ticketId: string };
                 </span>
               )}
             <Button
-                onClick={handleSubmit}
+                type="submit"
+                disabled={isSubmitting}
               size="lg"
                 className=" text-accent-foreground text-sm shadow-course transition-transform duration-300 ease-out hover:scale-105 border border-blue-500 shadow-[0px_5px_20px_rgba(0,173,255,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 <span className="bg-gradient-to-r from-[#51baff] to-[#2fa4ff] bg-clip-text text-transparent text-base sm:text-lg">
-                  ثبت سفارش
+                  {isSubmitting ? "در حال ثبت..." : "ثبت سفارش"}
                 </span>
             </Button>
             <Button
@@ -1034,6 +1105,7 @@ type TravelFormProps = { ticketId: string };
             </Button>
             </div>
           </div>
+          </form>
         </div>
       </div>
     </div>

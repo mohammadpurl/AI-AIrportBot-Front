@@ -1,4 +1,4 @@
-import { CipClass, CIPReservationData, CIPReservationResponse, CreateOrderRequest, CreateOrderResponse, CreatePassengerRequest, CreatePassengerResponse, FlightItem, FlightSearchRequest, FlightSearchResponse, FlightsListParams, FlightsListResponse, FlightType, Message, TicketInfo } from "@/types/type";
+import { CipClass, CIPReservationData, CIPReservationResponse, CreateOrderRequest, CreateOrderResponse, CreatePassengerRequest, CreatePassengerResponse, FlightItem, FlightSearchRequest, FlightSearchResponse, FlightsListParams, FlightsListResponse, FlightType, Message, TicketInfo, UpdateTripRequest, UpdateTripResponse } from "@/types/type";
 import { Language } from "@/hooks/useChat";
 import { notifyError } from "@/lib/notifier";
 
@@ -817,6 +817,99 @@ export async function getPaymentStatus(reservationId: string): Promise<{
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error occurred"
+    };
+  }
+}
+
+export async function updateTrip(request: UpdateTripRequest): Promise<UpdateTripResponse> {
+  try {
+    if (!process.env.NEXT_PUBLIC_API_URL) {
+      notifyError("متغیر NEXT_PUBLIC_API_URL تنظیم نشده است", "پیکربندی نامعتبر");
+      throw new Error("NEXT_PUBLIC_API_URL environment variable is not configured. Please set it in your .env.local file.");
+    }
+
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/api/v1/trips/${request.trip_id}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          order_id: request.order_id,
+          airportName: request.airportName,
+          travelType: request.travelType,
+          travelDate: request.travelDate,
+          flightNumber: request.flightNumber,
+          flightId: request.flightId,
+          buyer_phone: request.buyer_phone,
+          buyer_email: request.buyer_email,
+          passengers: request.passengers,
+          passengerCount: request.passengerCount,
+          additionalInfo: request.additionalInfo,
+          flightType: request.flightType,
+          cip_class_type: request.cip_class_type,
+          order_comment: request.order_comment,
+          payment_method: request.payment_method,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      notifyError("به‌روزرسانی سفر ناموفق بود", "خطای سرور");
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    
+    return {
+      success: true,
+      message: result.message || "سفر با موفقیت به‌روزرسانی شد",
+      data: result.data
+    };
+    
+  } catch (error) {
+    console.error('Error updating trip:', error);
+    notifyError(error instanceof Error ? error.message : "خطایی در به‌روزرسانی سفر رخ داد", "خطا");
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "خطایی در به‌روزرسانی سفر رخ داد"
+    };
+  }
+}
+
+export async function getPaymentLinkNew(orderId: string): Promise<{ success: boolean; payment_link?: string; error?: string }> {
+  try {
+    if (!process.env.NEXT_PUBLIC_API_URL) {
+      notifyError("متغیر NEXT_PUBLIC_API_URL تنظیم نشده است", "پیکربندی نامعتبر");
+      throw new Error("NEXT_PUBLIC_API_URL environment variable is not configured. Please set it in your .env.local file.");
+    }
+
+    const formData = new FormData();
+    formData.append('order_id', orderId);
+
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/order/payment/link`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      notifyError("دریافت لینک پرداخت ناموفق بود", "خطای سرور");
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    
+    return {
+      success: result.status || false,
+      payment_link: result.data?.payment_link,
+      error: result.message
+    };
+    
+  } catch (error) {
+    console.error('Error getting payment link:', error);
+    notifyError(error instanceof Error ? error.message : "خطایی در دریافت لینک پرداخت رخ داد", "خطا");
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "خطایی در دریافت لینک پرداخت رخ داد"
     };
   }
 }

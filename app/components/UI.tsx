@@ -25,6 +25,7 @@ export const UI = ({ hidden, cameraDetectionEnabled = true, setCameraDetectionEn
     endSession,
     showQRCode,
     setShowQRCode,
+    qrCodeImage,
     tripId,
     language,
     setLanguage,
@@ -274,9 +275,9 @@ export const UI = ({ hidden, cameraDetectionEnabled = true, setCameraDetectionEn
             right: '20px',
             background: "white",
             borderRadius: 8,
-            padding: 8,
+            padding: 16,
             boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-            minWidth: 100,
+            minWidth: 220,
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -285,7 +286,7 @@ export const UI = ({ hidden, cameraDetectionEnabled = true, setCameraDetectionEn
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 4 }}>
-            <h3 style={{ fontSize: 11, textAlign: "center", margin: 0, flex: 1 }}>
+            <h3 style={{ fontSize: 14, textAlign: "center", margin: 0, flex: 1 }}>
               QR Code بلیط
             </h3>
             <button
@@ -306,16 +307,26 @@ export const UI = ({ hidden, cameraDetectionEnabled = true, setCameraDetectionEn
               ✕
             </button>
           </div>
-          <QRCodeSVG
-            value={`${origin}/ticket/${tripId || '0'}`}
-            size={64}
-          />
-          {tripId && String(tripId).trim() !== '' && String(tripId) !== '0' && String(tripId) !== 'null' ? (
+          {qrCodeImage === "/Vbb.jpeg" ? (
+            <Image
+              src="/Vbb.jpeg"
+              alt="Location QR Code"
+              width={192}
+              height={192}
+              style={{ borderRadius: 4 }}
+            />
+          ) : (
+            <QRCodeSVG
+              value={`${origin}/ticket/${tripId || '0'}`}
+              size={192}
+            />
+          )}
+          {qrCodeImage !== "/Vbb.jpeg" && tripId && String(tripId).trim() !== '' && String(tripId) !== '0' && String(tripId) !== 'null' ? (
             <button
               onClick={handleTicketClick}
               style={{ 
-                fontSize: 10, 
-                marginTop: 4,
+                fontSize: 12, 
+                marginTop: 8,
                 cursor: 'pointer',
                 pointerEvents: 'auto'
               }}
@@ -323,9 +334,13 @@ export const UI = ({ hidden, cameraDetectionEnabled = true, setCameraDetectionEn
             >
               اینجا کلیک کنید
             </button>
-          ) : (
-            <div style={{ fontSize: 10, marginTop: 4, color: 'red' }}>
+          ) : qrCodeImage !== "/Vbb.jpeg" ? (
+            <div style={{ fontSize: 12, marginTop: 8, color: 'red' }}>
               شناسه بلیط نامعتبر است
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, marginTop: 8, color: 'blue' }}>
+              QR کد لوکیشن
             </div>
           )}
         </div>
@@ -334,19 +349,21 @@ export const UI = ({ hidden, cameraDetectionEnabled = true, setCameraDetectionEn
       <div className="fixed bottom-4 left-4 z-20 pointer-events-none">
         <div className="relative">
           {/* Circular background with a fresh, glass-like gradient complementing green */}
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-teal-400/60 via-cyan-500/60 to-blue-600/60 shadow-2xl border-4 border-white/20 backdrop-blur-md flex items-center justify-center">
+          <div className="w-56 h-56 rounded-full bg-gradient-to-br from-teal-400/60 via-cyan-500/60 to-blue-600/60 shadow-2xl border-4 border-white/20 backdrop-blur-md relative flex items-center justify-center">
             {/* Inner glow effect with a more subtle, matching color */}
             <div className="absolute inset-2 rounded-full bg-gradient-to-br from-teal-300/30 to-cyan-400/30 blur-sm"></div>
             
-            {/* Logo image */}
-            <Image
-              src="/4TH-EYE-FINAL-09.png"
-              alt="4TH-EYE Logo"
-              width={50}
-              height={50}
-              className="object-contain z-10"
-              priority
-            />
+            {/* Logo image - centered using flex */}
+            <div className="flex items-center justify-center w-full h-full relative z-10 pt-7">
+              <Image
+                src="/4TH-EYE-FINAL-09.png"
+                alt="4TH-EYE Logo"
+                width={150}
+                height={150}
+                className="object-contain"
+                priority
+              />
+            </div>
           </div>
 
           {/* Pulsing ring effect - adjusted for better visual harmony */}
@@ -488,7 +505,7 @@ export const UI = ({ hidden, cameraDetectionEnabled = true, setCameraDetectionEn
             </div>
           )}
         </div>
-        <div className="w-full flex flex-col items-end justify-center gap-4">
+        {/* <div className="w-full flex flex-col items-end justify-center gap-4">
           <button
             onClick={() => setCameraZoomed(!cameraZoomed)}
             className="pointer-events-auto bg-pink-500 hover:bg-pink-600 text-white p-4 rounded-md"
@@ -550,7 +567,7 @@ export const UI = ({ hidden, cameraDetectionEnabled = true, setCameraDetectionEn
               />
             </svg>
           </button>
-        </div>
+        </div> */}
         {/* <div className="flex items-center gap-2 pointer-events-auto max-w-screen-sm w-full mx-auto">
           <input
             className="w-full placeholder:text-gray-800 placeholder:italic p-4 rounded-md bg-opacity-50 bg-white backdrop-blur-md"

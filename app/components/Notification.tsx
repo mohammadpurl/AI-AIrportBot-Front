@@ -63,12 +63,12 @@ const NotificationItem: React.FC<NotificationProps> = ({ notification, onClose }
   };
 
   return (
-    <div
+    <div dir="rtl"
       className={`
         fixed top-4 right-4 z-[9999] max-w-sm w-full
         transform transition-all duration-300 ease-in-out
         ${isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}
-        ${getBgColor()} text-white rounded-lg shadow-lg p-4
+        bg-white text-black rounded-lg shadow-lg p-4
         border border-white/20 backdrop-blur-sm
       `}
     >

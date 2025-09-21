@@ -31,6 +31,8 @@ interface ChatContextType {
   // QR Code states
   showQRCode: boolean;
   setShowQRCode: (v: boolean) => void;
+  qrCodeImage: string;
+  setQrCodeImage: (v: string) => void;
   tripId: string | null;
   setTripId: (v: string | null) => void;
   
@@ -78,6 +80,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   
   // QR Code states
   const [showQRCode, setShowQRCode] = useState<boolean>(false);
+  const [qrCodeImage, setQrCodeImage] = useState<string>("/qr-code.png"); // Default QR code image
   const [tripId, setTripId] = useState<string | null>(null);
   
   // Voice states
@@ -97,13 +100,30 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   // Function to check if avatar message contains "کیو آر کد"
   const checkForQRCodeTrigger = async (messageText: string) => {
     const qrCodeKeywords = ["کیو آر کد", "QR کد", "کیوآر کد", "QR Code"];
+    const locationKeywords = ["لوکیشن", "location", "مکان", "جایگاه"];
+    
     const containsQRCode = qrCodeKeywords.some(keyword => 
       messageText.toLowerCase().includes(keyword.toLowerCase())
     );
     
+    const containsLocation = locationKeywords.some(keyword => 
+      messageText.toLowerCase().includes(keyword.toLowerCase())
+    );
+    
     if (containsQRCode) {
+      // Check if it's location-related QR code
+      if (containsLocation) {
+        console.log("Location QR Code triggered by avatar message:", messageText);
+        // Show Vbb.jpeg image for location QR code
+        setShowQRCode(true);
+        setQrCodeImage("/Vbb.jpeg"); // Set the specific image for location
+        startQrTimer();
+        return;
+      }
       
       console.log("QR Code triggered by avatar message:", messageText);
+      // Set default QR code image for normal flow
+      setQrCodeImage("/qr-code.png");
       debugger;
       extractPassengerDataWithOpenAI(messages)
         .then(async (data) => {
@@ -116,6 +136,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
             flightNumber: data.flightNumber,
             flightType: data.flightType,
             additionalInfo: data.additionalInfo,
+            buyer_phone: data.buyer_phone,
+            buyer_email: data.buyer_email,
             passengers: (data.passengers || []).map((p: Passenger) => ({
               name: p.name,
               lastName: p.lastName ?? "",
@@ -154,6 +176,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
             airportName: "",
             travelDate: "",
             flightNumber: "",
+            buyer_phone: "",
+            buyer_email: "",
             passengers: [],
           };
           
@@ -177,6 +201,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
           }
           
           setShowQRCode(true);
+          setQrCodeImage("/qr-code.png"); // Set default image in catch block too
+          startQrTimer();
           clearMessages();
         });
     }
@@ -429,6 +455,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         clearMessages,
         showQRCode,
         setShowQRCode,
+        qrCodeImage,
+        setQrCodeImage,
         tripId,
         setTripId,
       }}

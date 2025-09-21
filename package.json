@@ -12,6 +12,7 @@
     "@gltf-transform/core": "^4.2.1",
     "@gltf-transform/extensions": "^4.2.1",
     "@gltf-transform/functions": "^4.2.1",
+    "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-label": "^2.1.7",
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-toast": "^1.2.15",
@@ -29,10 +30,12 @@
     "qrcode.react": "^4.2.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "react-hook-form": "^7.63.0",
     "react-multi-date-picker": "^4.5.2",
     "react-qr-code": "^2.0.18",
     "tailwind-merge": "^3.3.1",
-    "three": "^0.178.0"
+    "three": "^0.178.0",
+    "zod": "^4.1.11"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
