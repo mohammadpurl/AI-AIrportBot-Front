@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Lmp61430
+      POSTGRES_DB: airport_ai_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: D:/source/AI-Airport-Bot-main
+    container_name: fastapi_app
+    restart: always
+    depends_on:
+      - db
+    environment:
+      POSTGRES_SERVER: db   # تغییر دادم از localhost به db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Lmp61430
+      POSTGRES_DB: airport_ai_db
+      DATABASE_URL: postgresql+psycopg://postgres:Lmp61430@db:5432/airport_ai_db
+      NODE_ENV: production
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./audios:/app/audios
+      - ./bin:/app/bin
+
+  frontend:
+    build:
+      context: D:/source/readyplayer-assistant-frontend/readyplayer-assistant-frontend
+    container_name: frontend_app
+    restart: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  db_data:

@@ -271,8 +271,8 @@ export const UI = ({ hidden, cameraDetectionEnabled = true, setCameraDetectionEn
         <div
           style={{
             position: 'fixed',
-            bottom: '120px', // Above the End Session button area
-            right: '20px',
+            bottom: '300px', // Above the End Session button area
+            left: '20px',
             background: "white",
             borderRadius: 8,
             padding: 16,
@@ -346,7 +346,7 @@ export const UI = ({ hidden, cameraDetectionEnabled = true, setCameraDetectionEn
         </div>
       )}
       {/* 4TH-EYE Logo in left corner */}
-      <div className="fixed bottom-4 left-4 z-20 pointer-events-none">
+      <div className="fixed bottom-16 left-4 z-20 pointer-events-none">
         <div className="relative">
           {/* Circular background with a fresh, glass-like gradient complementing green */}
           <div className="w-56 h-56 rounded-full bg-gradient-to-br from-teal-400/60 via-cyan-500/60 to-blue-600/60 shadow-2xl border-4 border-white/20 backdrop-blur-md relative flex items-center justify-center">

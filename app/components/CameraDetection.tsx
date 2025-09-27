@@ -179,7 +179,7 @@ export const CameraDetection = ({ enabled = true, onStart }: CameraDetectionProp
         </div>
       </div>
 
-      <div className="fixed top-40 right-40 translate-x-32 z-50 bg-black bg-opacity-75 rounded-lg p-2 text-white text-xs">
+      {/* <div className="fixed top-40 right-40 translate-x-32 z-50 bg-black bg-opacity-75 rounded-lg p-2 text-white text-xs">
         <div className="flex items-center gap-2">
           <div className={`w-3 h-3 rounded-full ${isDetecting ? 'bg-green-500' : 'bg-red-500'}`}></div>
           <span>
@@ -213,7 +213,7 @@ export const CameraDetection = ({ enabled = true, onStart }: CameraDetectionProp
             </div>
           </div>
         )}
-      </div>
+      </div> */}
 
       {/* Hidden processing video */}
       <video
